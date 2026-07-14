@@ -53,11 +53,54 @@
 
     <div id="result" class="result"></div>
     <div class="hint" id="hint"></div>
+
+    <div id="paso2" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+      <div class="sub" style="margin-bottom:10px">Paso 2 — confirmar que Supabase acepta este token como válido de verdad, consultando una tabla real.</div>
+      <button id="btn2" onclick="probarTabla()" style="background:#2f7a4d">Probar consulta a tabla</button>
+      <div id="result2" class="result"></div>
+    </div>
   </div>
 </div>
 
 <script>
 const URL_FN = "https://znqsbadwcfgunwndtswd.supabase.co/functions/v1/emitir-token";
+const SUPABASE_URL = "https://znqsbadwcfgunwndtswd.supabase.co";
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpucXNiYWR3Y2ZndW53bmR0c3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNDQ0MDAsImV4cCI6MjA5MzYyMDQwMH0.pbzUbObiitXCGrJYazO0SfaQrBchDqIR4_ZgEmjmhZQ";
+let tokenActual = null;
+
+async function probarTabla(){
+  const btn2 = document.getElementById('btn2');
+  const result2 = document.getElementById('result2');
+  if(!tokenActual){ result2.className='result show error'; result2.textContent='Primero prueba el login arriba.'; return; }
+
+  btn2.disabled = true; btn2.textContent = 'Consultando...';
+  result2.className = 'result show';
+  result2.innerHTML = '<span class="badge pend">Enviando...</span>';
+
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/conciliacion_extractos?select=id&limit=1`, {
+      headers: {
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${tokenActual}`
+      }
+    });
+    const text = await res.text();
+    let data; try{ data = JSON.parse(text); } catch { data = text; }
+
+    if(res.ok){
+      result2.className = 'result show ok';
+      result2.innerHTML = '<span class="badge ok">✓ Supabase aceptó el token — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+    } else {
+      result2.className = 'result show error';
+      result2.innerHTML = '<span class="badge error">Rechazado — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+    }
+  } catch(e){
+    result2.className = 'result show error';
+    result2.innerHTML = '<span class="badge error">Error de conexión</span>\n\n' + String(e);
+  } finally {
+    btn2.disabled = false; btn2.textContent = 'Probar consulta a tabla';
+  }
+}
 
 async function probar(){
   const btn = document.getElementById('btn');
@@ -90,9 +133,11 @@ async function probar(){
     const data = await res.json();
 
     if(res.ok && data.token){
+      tokenActual = data.token;
+      document.getElementById('paso2').style.display = 'block';
       result.className = 'result show ok';
       result.innerHTML = '<span class="badge ok">✓ Token real emitido — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
-      hint.textContent = '✅ Esto significa que la firma funcionó de verdad — ya no está en modo de prueba.';
+      hint.textContent = '✅ Esto significa que la firma funcionó de verdad — ya no está en modo de prueba. Ahora prueba el Paso 2 abajo.';
     } else if(res.ok && data.estado === 'modo_prueba'){
       result.className = 'result show error';
       result.innerHTML = '<span class="badge error">Sigue en modo de prueba — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
