@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ContaFlex · Prueba de login (temporal)</title>
+<style>
+  :root{
+    --navy:#0B2C5F; --navy-deep:#0f1f3d; --gold:#C9A84C; --ink:#1A2233;
+    --ok:#2f7a4d; --err:#b02b2b; --line:#d8dee9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#F5F7FA;color:var(--ink);padding:18px}
+  .wrap{max-width:480px;margin:0 auto}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+  h1{font-size:18px;color:var(--navy);margin:0 0 4px}
+  .sub{font-size:12.5px;color:#5B6577;margin-bottom:16px;line-height:1.5}
+  .warn{background:#FBF3E4;border:1px solid #E3D3A3;border-radius:8px;padding:10px 12px;font-size:11.5px;color:#7a4d12;margin-bottom:16px;line-height:1.5}
+  label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin:12px 0 4px}
+  input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:15px}
+  input:focus{outline:2px solid var(--gold);border-color:var(--gold)}
+  button{width:100%;margin-top:16px;padding:13px;background:var(--navy-deep);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:0.6}
+  button:active{transform:scale(0.99)}
+  .result{margin-top:16px;border-radius:10px;padding:14px;font-family:'Courier New',monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-all;display:none}
+  .result.show{display:block}
+  .result.ok{background:#EAF5EE;border:1.5px solid var(--ok);color:#1e5233}
+  .result.error{background:#FBEBEB;border:1.5px solid var(--err);color:#7a1f1f}
+  .badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:20px;margin-bottom:8px}
+  .badge.ok{background:var(--ok);color:#fff}
+  .badge.error{background:var(--err);color:#fff}
+  .badge.pend{background:#94a3b8;color:#fff}
+  .hint{font-size:11px;color:#5B6577;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Prueba de emitir-token</h1>
+    <div class="sub">Página temporal solo para probar. Tu usuario y clave se envían directo desde este navegador a Supabase — nunca pasan por Claude ni quedan guardados en ningún lado.</div>
+    <div class="warn">⚠️ Borra o deja de usar esta página cuando termines de probar. Es solo una herramienta de diagnóstico, no hace parte de la app.</div>
+
+    <label for="username">Usuario</label>
+    <input id="username" type="text" autocomplete="username" placeholder="tu usuario de ContaFlex">
+
+    <label for="clave">Clave</label>
+    <input id="clave" type="password" autocomplete="current-password" placeholder="tu clave">
+
+    <label for="empresa">ID de empresa (opcional — déjalo vacío)</label>
+    <input id="empresa" type="text" placeholder="opcional">
+
+    <button id="btn" onclick="probar()">Probar login</button>
+
+    <div id="result" class="result"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+</div>
+
+<script>
+const URL_FN = "https://znqsbadwcfgunwndtswd.supabase.co/functions/v1/emitir-token";
+
+async function probar(){
+  const btn = document.getElementById('btn');
+  const result = document.getElementById('result');
+  const hint = document.getElementById('hint');
+  const username = document.getElementById('username').value.trim();
+  const clave = document.getElementById('clave').value;
+  const empresa_id = document.getElementById('empresa').value.trim();
+
+  if(!username || !clave){
+    result.className = 'result show error';
+    result.textContent = 'Escribe usuario y clave.';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Probando...';
+  result.className = 'result show';
+  result.innerHTML = '<span class="badge pend">Enviando...</span>';
+  hint.textContent = '';
+
+  try {
+    const body = { username, clave };
+    if(empresa_id) body.empresa_id = empresa_id;
+
+    const res = await fetch(URL_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    if(res.ok && data.token){
+      result.className = 'result show ok';
+      result.innerHTML = '<span class="badge ok">✓ Token real emitido — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+      hint.textContent = '✅ Esto significa que la firma funcionó de verdad — ya no está en modo de prueba.';
+    } else if(res.ok && data.estado === 'modo_prueba'){
+      result.className = 'result show error';
+      result.innerHTML = '<span class="badge error">Sigue en modo de prueba — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+      hint.textContent = '⚠️ Las credenciales son correctas, pero la función todavía no está firmando tokens reales. Revisa el nombre del secreto en el código.';
+    } else {
+      result.className = 'result show error';
+      result.innerHTML = '<span class="badge error">Error — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+      hint.textContent = 'Copia este mensaje completo (sin la clave, que no aparece aquí) y compártelo para revisar la causa.';
+    }
+  } catch(e){
+    result.className = 'result show error';
+    result.innerHTML = '<span class="badge error">Error de conexión</span>\n\n' + String(e);
+    hint.textContent = 'Puede ser un problema de red, o que la función no esté desplegada todavía.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Probar login';
+  }
+}
+</script>
+</body>
+</html>
