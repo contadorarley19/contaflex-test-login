@@ -59,6 +59,14 @@
       <button id="btn2" onclick="probarTabla()" style="background:#2f7a4d">Probar consulta a tabla</button>
       <div id="result2" class="result"></div>
     </div>
+
+    <div id="paso3" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+      <div class="sub" style="margin-bottom:10px">Paso 3 — probar ESCRITURA: guardar un registro de prueba en tu propia empresa (debe funcionar) y en una empresa ajena (debe ser rechazado).</div>
+      <button id="btn3a" onclick="probarEscribirPropia()" style="background:#2f7a4d;margin-bottom:8px">Probar guardar en MI empresa</button>
+      <div id="result3a" class="result"></div>
+      <button id="btn3b" onclick="probarEscribirAjena()" style="background:#b02b2b;margin-top:12px">Probar guardar en OTRA empresa (debe fallar)</button>
+      <div id="result3b" class="result"></div>
+    </div>
   </div>
 </div>
 
@@ -67,6 +75,53 @@ const URL_FN = "https://znqsbadwcfgunwndtswd.supabase.co/functions/v1/emitir-tok
 const SUPABASE_URL = "https://znqsbadwcfgunwndtswd.supabase.co";
 const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpucXNiYWR3Y2ZndW53bmR0c3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNDQ0MDAsImV4cCI6MjA5MzYyMDQwMH0.pbzUbObiitXCGrJYazO0SfaQrBchDqIR4_ZgEmjmhZQ";
 let tokenActual = null;
+let empresaPropia = null;
+
+function decodificarToken(t){
+  try{
+    const partes = t.split('.');
+    const payload = partes[1] + '='.repeat((4 - partes[1].length % 4) % 4);
+    return JSON.parse(atob(payload.replace(/-/g,'+').replace(/_/g,'/')));
+  }catch(e){ return null; }
+}
+
+async function insertarPrueba(empresaId, resultId, btnId){
+  const btn = document.getElementById(btnId);
+  const result = document.getElementById(resultId);
+  btn.disabled = true;
+  result.className = 'result show';
+  result.innerHTML = '<span class="badge pend">Enviando...</span>';
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/conciliacion_extractos`, {
+      method: 'POST',
+      headers: {
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${tokenActual}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({
+        empresa_id: empresaId, periodo: '2026-07-TEST-ESCRITURA', banco: 'PRUEBA-ESCRITURA',
+        cuenta: '000-TEST', fecha: new Date().toISOString().slice(0,10), descripcion: 'Prueba de escritura RLS'
+      })
+    });
+    const text = await res.text();
+    let data; try{ data = JSON.parse(text); } catch { data = text; }
+
+    if(res.ok){
+      result.className = 'result show ok';
+      result.innerHTML = '<span class="badge ok">✓ Guardado — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+    } else {
+      result.className = 'result show error';
+      result.innerHTML = '<span class="badge error">Rechazado — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
+    }
+  }catch(e){
+    result.className = 'result show error';
+    result.innerHTML = '<span class="badge error">Error de conexión</span>\n\n' + String(e);
+  } finally { btn.disabled = false; }
+}
+function probarEscribirPropia(){ insertarPrueba(empresaPropia, 'result3a', 'btn3a'); }
+function probarEscribirAjena(){ insertarPrueba('EMPRESA-AJENA-FALSA', 'result3b', 'btn3b'); }
 
 async function probarTabla(){
   const btn2 = document.getElementById('btn2');
@@ -134,7 +189,10 @@ async function probar(){
 
     if(res.ok && data.token){
       tokenActual = data.token;
+      const payload = decodificarToken(data.token);
+      empresaPropia = (payload && payload.empresa_id) || data.empresa_id;
       document.getElementById('paso2').style.display = 'block';
+      document.getElementById('paso3').style.display = 'block';
       result.className = 'result show ok';
       result.innerHTML = '<span class="badge ok">✓ Token real emitido — HTTP ' + res.status + '</span>\n\n' + JSON.stringify(data, null, 2);
       hint.textContent = '✅ Esto significa que la firma funcionó de verdad — ya no está en modo de prueba. Ahora prueba el Paso 2 abajo.';
